@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { Tool } from '../types';
 import { bresenhamLine, floodFill } from '../canvasUtils';
 
@@ -21,13 +21,14 @@ interface Props {
   layerRefs: React.MutableRefObject<Map<string, LayerRef>>;
   activeLayerId: string;
   onColorPick: (color: string) => void;
-  onAfterStroke: () => void;   // call after stroke ends to snapshot history
-  onLayerSnapshot: () => void; // snapshot BEFORE a stroke begins
+  onAfterStroke: () => void;
+  onLayerSnapshot: () => void;
+  onImageDrop: (dataUrl: string, naturalW: number, naturalH: number) => void;
 }
 
 export default function Canvas({
   canvasW, canvasH, zoom, showGrid, tool, color, brushSize,
-  layerRefs, activeLayerId, onColorPick, onAfterStroke, onLayerSnapshot,
+  layerRefs, activeLayerId, onColorPick, onAfterStroke, onLayerSnapshot, onImageDrop,
 }: Props) {
   const displayRef = useRef<HTMLCanvasElement>(null);
   const compRef    = useRef<HTMLCanvasElement | null>(null);
@@ -37,6 +38,42 @@ export default function Canvas({
   const lastPx  = useRef<[number, number] | null>(null);
   const moveStart = useRef<[number, number] | null>(null);
   const moveLayerStart = useRef<[number, number]>([0, 0]);
+
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files')) {
+      setDragOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const img = new Image();
+      img.onload = () => {
+        onImageDrop(dataUrl, img.naturalWidth, img.naturalHeight);
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  }, [onImageDrop]);
 
   // Ensure compositing canvas
   if (!compRef.current) {
@@ -228,7 +265,12 @@ export default function Canvas({
   }, [handleMouseUp]);
 
   return (
-    <div className="canvas-area">
+    <div
+      className={`canvas-area${dragOver ? ' drag-over' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className="canvas-wrapper">
         <canvas
           ref={displayRef}

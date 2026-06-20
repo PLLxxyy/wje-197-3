@@ -191,6 +191,32 @@ export default function App() {
     (window as any).__pixelRender?.();
   }, [canvasW, canvasH, layers.length]);
 
+  const handleImageDrop = useCallback(async (dataUrl: string, naturalW: number, naturalH: number) => {
+    const c = makeCanvas(naturalW, naturalH);
+    const ctx = c.getContext('2d')!;
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0);
+        resolve();
+      };
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+    const id = uid();
+    const num = layers.length + 1;
+    const layer: Layer = { id, name: `图层 ${num}`, canvas: c, visible: true, opacity: 1, offsetX: 0, offsetY: 0 };
+    layerRefs.current.set(id, layer);
+    setLayers(prev => [...prev, layer]);
+    setActiveLayerId(id);
+    setHistory(prev => {
+      const next = [...prev, { snapshots: { [id]: { dataUrl: canvasToUrl(c), offsetX: 0, offsetY: 0 } } }];
+      return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
+    });
+    setRedoStack([]);
+    setTimeout(() => (window as any).__pixelRender?.(), 0);
+  }, [layers.length]);
+
   const handleDeleteLayer = useCallback((id: string) => {
     if (layers.length <= 1) return;
     layerRefs.current.delete(id);
@@ -387,6 +413,7 @@ export default function App() {
           onColorPick={handleColorPick}
           onAfterStroke={handleAfterStroke}
           onLayerSnapshot={handleLayerSnapshot}
+          onImageDrop={handleImageDrop}
         />
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <Toolbar
