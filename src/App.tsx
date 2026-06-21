@@ -192,6 +192,7 @@ export default function App() {
   }, [canvasW, canvasH, layers.length]);
 
   const handleImageDrop = useCallback(async (dataUrl: string, naturalW: number, naturalH: number) => {
+    const beforeSnap = captureAll().snapshots;
     const c = makeCanvas(naturalW, naturalH);
     const ctx = c.getContext('2d')!;
     const img = new Image();
@@ -210,12 +211,12 @@ export default function App() {
     setLayers(prev => [...prev, layer]);
     setActiveLayerId(id);
     setHistory(prev => {
-      const next = [...prev, { snapshots: { [id]: { dataUrl: canvasToUrl(c), offsetX: 0, offsetY: 0 } } }];
+      const next = [...prev, { snapshots: { ...beforeSnap, [id]: { dataUrl: canvasToUrl(c), offsetX: 0, offsetY: 0 } } }];
       return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
     });
     setRedoStack([]);
     setTimeout(() => (window as any).__pixelRender?.(), 0);
-  }, [layers.length]);
+  }, [layers.length, captureAll]);
 
   const handleDeleteLayer = useCallback((id: string) => {
     if (layers.length <= 1) return;
@@ -231,7 +232,7 @@ export default function App() {
   const handleDuplicateLayer = useCallback((id: string) => {
     const src = layerRefs.current.get(id);
     if (!src) return;
-    const c = makeCanvas(canvasW, canvasH);
+    const c = makeCanvas(src.canvas.width, src.canvas.height);
     c.getContext('2d')!.drawImage(src.canvas, 0, 0);
     const newId = uid();
     const layer: Layer = { id: newId, name: `${layers.find(l => l.id === id)?.name || '图层'} 副本`, canvas: c, visible: true, opacity: src.opacity, offsetX: src.offsetX, offsetY: src.offsetY };
@@ -240,7 +241,7 @@ export default function App() {
     setLayers(prev => { const n = [...prev]; n.splice(idx + 1, 0, layer); return n; });
     setActiveLayerId(newId);
     setTimeout(() => (window as any).__pixelRender?.(), 0);
-  }, [canvasW, canvasH, layers]);
+  }, [layers]);
 
   const handleToggleVis = useCallback((id: string) => {
     setLayers(prev => prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l));
@@ -305,6 +306,8 @@ export default function App() {
       dataUrl: canvasToUrl(l.canvas),
       offsetX: l.offsetX,
       offsetY: l.offsetY,
+      width: l.canvas.width,
+      height: l.canvas.height,
     }));
 
     const art: Artwork = {
@@ -333,7 +336,9 @@ export default function App() {
     layerRefs.current.clear();
     const newLayers: Layer[] = [];
     for (const ld of art.layers) {
-      const c = makeCanvas(art.width, art.height);
+      const lw = ld.width ?? art.width;
+      const lh = ld.height ?? art.height;
+      const c = makeCanvas(lw, lh);
       await drawUrlOnCanvas(c, ld.dataUrl);
       const layer: Layer = { id: ld.id, name: ld.name, canvas: c, visible: ld.visible, opacity: ld.opacity, offsetX: ld.offsetX, offsetY: ld.offsetY };
       layerRefs.current.set(ld.id, layer);

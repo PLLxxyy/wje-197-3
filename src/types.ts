@@ -8,6 +8,8 @@ export interface LayerData {
   dataUrl: string;       // PNG data URL
   offsetX: number;
   offsetY: number;
+  width: number;
+  height: number;
 }
 
 export interface Artwork {
